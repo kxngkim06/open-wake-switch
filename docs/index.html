@@ -6,18 +6,23 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Wake Switch">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#1B1916">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
 <title>Open Wake Switch</title>
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
 <style>
   :root {
-    --black: #000000; --surface: #1C1C1E; --raised: #2C2C2E; --line: #38383A;
-    --text: #FFFFFF; --muted: #8E8E93; --yellow: #FFD60A; --red: #FF453A; --green: #30D158;
-    --r: 12px;
+    --bg: #1B1916; --surface: #26231F; --raised: #332F2A; --line: #3D3832;
+    --text: #F4EEE3; --muted: #A39C90; --yellow: #F2CF72; --ink: #1B1916;
+    --sage: #B8D8C4; --lavender: #C9C2EE; --peach: #F3B9A6; --red: #F08C7A;
+    --r: 16px;
+    --display: "Bricolage Grotesque", "DM Sans", -apple-system, sans-serif;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { background: var(--black); color: var(--text); }
-  body { margin: 0; font: 17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  html, body { background: var(--bg); color: var(--text); }
+  body { margin: 0; font: 17px/1.4 "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
          -webkit-font-smoothing: antialiased; padding: env(safe-area-inset-top) 0 calc(130px + env(safe-area-inset-bottom)); }
   .wrap { max-width: 520px; margin: 0 auto; padding: 0 20px; }
   .hidden { display: none !important; }
@@ -27,10 +32,10 @@
 
   /* ---------- navigation header ---------- */
   .nav { display: flex; align-items: flex-end; justify-content: space-between; padding: 18px 0 10px; }
-  h1 { font-size: 34px; font-weight: 700; letter-spacing: .3px; margin: 0; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 800; letter-spacing: -.8px; margin: 0; }
   .status { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 15px; padding-bottom: 6px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .dot.ok { background: var(--green); } .dot.bad { background: var(--red); }
+  .dot.ok { background: var(--sage); } .dot.bad { background: var(--red); }
 
   /* ---------- grouped lists ---------- */
   .section-head { color: var(--muted); font-size: 13px; margin: 26px 16px 7px; }
@@ -45,21 +50,22 @@
   .danger { color: var(--red); }
 
   /* ---------- big clock numerals (the one loud element) ---------- */
-  .clock { font-weight: 200; font-size: 58px; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
-  .clock .ap { font-size: 26px; font-weight: 300; letter-spacing: 0; margin-left: 2px; }
-  .clock.mid { font-size: 52px; }
+  .clock { font-family: var(--display); font-weight: 700; font-size: 56px; line-height: 1; letter-spacing: -2px; }
+  .clock .ap { font-size: 22px; font-weight: 600; letter-spacing: 0; margin-left: 6px; color: var(--muted); }
+  .clock.mid { font-size: 46px; }
 
   /* ---------- switch tab ---------- */
   .next { padding: 18px 16px 20px; }
   .next .when { color: var(--muted); font-size: 15px; margin-bottom: 6px; }
   .next .meta { color: var(--muted); font-size: 15px; margin-top: 8px; }
-  .kind { color: var(--yellow); }
+  .kind { display: inline-block; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; color: var(--ink); margin-left: 8px; vertical-align: 1px; }
+  .kind.weekly { background: var(--sage); } .kind.override { background: var(--lavender); } .kind.oneshot { background: var(--peach); }
   .power { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-  .power button { background: var(--surface); border-radius: 22px; padding: 22px 16px 18px; text-align: left;
+  .power button { background: var(--surface); border-radius: 24px; padding: 22px 16px 18px; text-align: left;
                   display: flex; flex-direction: column; gap: 26px; transition: background .2s, color .2s; }
   .power button svg { width: 30px; height: 30px; }
-  .power button span { font-size: 22px; font-weight: 600; }
-  .power button.active { background: var(--yellow); color: #000; }
+  .power button span { font-family: var(--display); font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+  .power button.active { background: var(--yellow); color: var(--ink); }
   .power button:active { transform: scale(.98); }
   .note { color: var(--muted); font-size: 13px; margin: 10px 16px 0; line-height: 1.4; }
   .warn { color: var(--yellow); }
@@ -70,32 +76,32 @@
   .alarm .timebox input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; font-size: 16px; cursor: pointer; }
   .alarm .label { font-size: 15px; margin-top: 4px; }
   .alarm.off .clock, .alarm.off .label { color: var(--muted); }
-  .alarm.off .clock { opacity: .55; }
+  .alarm.off .clock { opacity: .45; }
 
   /* iOS switch */
   .switch { position: relative; width: 51px; height: 31px; flex: none; }
   .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
   .switch i { position: absolute; inset: 0; background: var(--raised); border-radius: 31px; transition: background .2s; pointer-events: none; }
   .switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
-                     background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.3); transition: transform .2s; }
+                     background: var(--text); box-shadow: 0 2px 4px rgba(0,0,0,.3); transition: transform .2s; }
   .switch input:checked + i { background: var(--yellow); }
   .switch input:checked + i::after { transform: translateX(20px); }
   .switch input:focus-visible + i { outline: 2px solid var(--yellow); outline-offset: 2px; }
 
   .field { background: var(--raised); border: 0; border-radius: 10px; color: var(--text); font: inherit; padding: 8px 12px; color-scheme: dark; }
   .pillbtn { background: var(--raised); border-radius: 10px; padding: 9px 14px; font-size: 15px; font-weight: 600; }
-  .pillbtn.primary { background: var(--yellow); color: #000; }
+  .pillbtn.primary { background: var(--yellow); color: var(--ink); }
 
   /* ---------- one-time tab ---------- */
   .quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .quick button { background: var(--surface); border-radius: var(--r); padding: 16px 8px; font-size: 17px; font-weight: 600; }
-  .quick button small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; margin-top: 2px; }
+  .quick button { background: var(--surface); border-radius: var(--r); padding: 16px 8px; font-family: var(--display); font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+  .quick button small { display: block; color: var(--muted); font-family: "DM Sans", sans-serif; font-weight: 500; font-size: 13px; letter-spacing: 0; margin-top: 2px; }
   .quick button:active { background: var(--raised); }
   .seg { display: inline-flex; background: var(--raised); border-radius: 9px; padding: 2px; }
   .seg button { padding: 6px 12px; border-radius: 7px; font-size: 15px; }
-  .seg button.on { background: #636366; }
+  .seg button.on { background: var(--yellow); color: var(--ink); font-weight: 600; }
   .minus { width: 24px; height: 24px; border-radius: 50%; background: var(--red); position: relative; flex: none; }
-  .minus::after { content: ""; position: absolute; left: 6px; right: 6px; top: 11px; height: 2px; background: #fff; border-radius: 1px; }
+  .minus::after { content: ""; position: absolute; left: 6px; right: 6px; top: 11px; height: 2px; background: var(--ink); border-radius: 1px; }
 
   /* ---------- settings stepper ---------- */
   .stepper { display: inline-flex; align-items: center; background: var(--raised); border-radius: 9px; }
@@ -104,30 +110,30 @@
 
   /* ---------- save bar ---------- */
   .savebar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom));
-             width: min(480px, calc(100% - 32px)); background: rgba(44,44,46,.92); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+             width: min(480px, calc(100% - 32px)); background: rgba(51,47,42,.94); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
              border-radius: 16px; padding: 10px 10px 10px 16px; display: none; align-items: center; gap: 8px; z-index: 20; }
   .savebar.show { display: flex; }
 
   /* ---------- tab bar ---------- */
   .tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom));
             width: min(480px, calc(100% - 32px)); display: grid; grid-template-columns: repeat(4, 1fr);
-            background: rgba(28,28,30,.78); backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%);
-            border: .5px solid rgba(255,255,255,.08); border-radius: 36px; padding: 6px; z-index: 30; }
+            background: rgba(38,35,31,.86); backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
+            border: .5px solid rgba(244,238,227,.08); border-radius: 36px; padding: 6px; z-index: 30; }
   .tabbar button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 6px; border-radius: 30px;
-                   color: var(--text); font-size: 11px; font-weight: 500; }
+                   color: var(--muted); font-size: 11px; font-weight: 600; }
   .tabbar button svg { width: 26px; height: 26px; }
-  .tabbar button.on { background: rgba(255,255,255,.08); color: var(--yellow); }
+  .tabbar button.on { background: rgba(242,207,114,.14); color: var(--yellow); }
 
   /* ---------- toast ---------- */
   #toast { position: fixed; left: 50%; bottom: calc(160px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px);
-           background: rgba(58,58,60,.95); color: #fff; padding: 10px 16px; border-radius: 20px; font-size: 15px;
+           background: rgba(61,56,50,.97); color: var(--text); padding: 10px 16px; border-radius: 20px; font-size: 15px;
            opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: 90%; text-align: center; z-index: 40; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
   /* ---------- login ---------- */
   #login .group input { background: transparent; border: 0; color: var(--text); font: inherit; width: 100%; padding: 0; }
-  #login .group input::placeholder { color: #5a5a5f; }
-  .cta { width: 100%; background: var(--yellow); color: #000; font-weight: 600; border-radius: 14px; padding: 15px; margin-top: 22px; }
+  #login .group input::placeholder { color: #6E675D; }
+  .cta { width: 100%; background: var(--yellow); color: var(--ink); font-weight: 600; border-radius: 14px; padding: 15px; margin-top: 22px; }
 
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -329,10 +335,10 @@ function parseLocal(s) {
 }
 function split12(hhmm) {                       // "07:30" -> ["7:30", "AM"]
   let [h, m] = hhmm.split(':').map(Number);
-  const ap = h < 12 ? 'AM' : 'PM'; h = h % 12 || 12;
+  const ap = h < 12 ? 'am' : 'pm'; h = h % 12 || 12;
   return [`${h}:${pad(m)}`, ap];
 }
-function t12(hhmm) { const [t, ap] = split12(hhmm); return `${t} ${ap}`; }
+function t12(hhmm) { const [t, ap] = split12(hhmm); return `${t} ${ap.toUpperCase()}`; }
 function clockHTML(hhmm) {
   const [t, ap] = split12(hhmm);
   const s = document.createElement('span'); s.textContent = t;
@@ -449,9 +455,8 @@ function render() {
     const d = parseLocal(st.next.at);
     $('nextWhen').textContent = dayName(d);
     clock.replaceChildren(clockHTML(hm(d)));
-    const k = document.createElement('span'); k.className = 'kind'; k.textContent = KIND[st.next.kind] || st.next.kind;
-    k.style.marginLeft = '8px';
-    $('nextMeta').replaceChildren(document.createTextNode(relative(d)), k);
+    const k = document.createElement('span'); k.className = 'kind ' + st.next.kind; k.textContent = KIND[st.next.kind] || st.next.kind;
+        $('nextMeta').replaceChildren(document.createTextNode(relative(d)), k);
   } else if (st) {
     $('nextWhen').textContent = 'Next alarm';
     clock.textContent = 'None';
