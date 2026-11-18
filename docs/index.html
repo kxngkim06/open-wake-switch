@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wake Switch">
+<meta name="theme-color" content="#111827">
+<title>Open Wake Switch</title>
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<style>
+  :root {
+    --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #f59e0b; --accent-ink: #1f2937; --ok: #16a34a; --bad: #dc2626; --chip: #f3f4f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0b0f17; --card: #151b26; --text: #f3f4f6; --muted: #9ca3af; --line: #263041;
+            --chip: #1f2735; --accent-ink: #111827; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", Roboto, sans-serif;
+         padding: env(safe-area-inset-top) 0 calc(90px + env(safe-area-inset-bottom)); }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 14px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.2px; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 10px;
+          border-radius: 999px; background: var(--chip); color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); }
+  .big { font-size: 34px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.15; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--chip); color: var(--muted); margin-left: 6px; vertical-align: middle; }
+  .warn { background: #fef3c7; color: #92400e; border-radius: 10px; padding: 8px 10px; font-size: 14px; margin-top: 10px; }
+  @media (prefers-color-scheme: dark) { .warn { background: #3a2a07; color: #fcd34d; } }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row + .row { margin-top: 10px; }
+  .grow { flex: 1; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--chip); color: var(--text);
+           border-radius: 12px; padding: 10px 14px; cursor: pointer; }
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.45; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; }
+  button.big-btn { flex: 1; padding: 18px 0; font-size: 18px; font-weight: 700; }
+  button.ghost { background: transparent; }
+  button.x { padding: 4px 10px; border-radius: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  input[type=time], input[type=number], input[type=text], input[type=password], select {
+    font: inherit; color: var(--text); background: var(--chip); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 10px; }
+  input[type=text], input[type=password] { width: 100%; }
+  input[type=number] { width: 80px; }
+  .day { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .day:first-of-type { border-top: 0; }
+  .day .name { font-weight: 700; }
+  .day.off .name, .day.off input[type=time] { opacity: 0.4; }
+  .switch { position: relative; width: 46px; height: 28px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: var(--line); border-radius: 999px; transition: .15s; }
+  .switch span::after { content: ""; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(18px); }
+  .list-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--line); }
+  .list-item:first-child { border-top: 0; }
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+             background: var(--card); border-top: 1px solid var(--line); display: none; }
+  .savebar .inner { max-width: 520px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+  .savebar.show { display: block; }
+  #toast { position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%); background: #111827; color: #fff;
+           padding: 10px 14px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90%; text-align: center; }
+  #toast.show { opacity: 0.95; }
+  .hidden { display: none !important; }
+  label.field { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  footer { text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== Login ===== -->
+  <section id="login" class="card hidden">
+    <h1 style="margin-bottom:6px">Open Wake Switch</h1>
+    <div class="sub">처음 한 번만 입력하면 이 기기에 저장돼요.</div>
+    <label class="field">브로커 주소 (EMQX Address)</label>
+    <input id="inHost" type="text" placeholder="xxxxxxxx.ala.us-east-1.emqxsl.com" autocapitalize="off" autocomplete="off" spellcheck="false">
+    <label class="field">사용자 이름</label>
+    <input id="inUser" type="text" placeholder="phone" autocapitalize="off" autocomplete="username" spellcheck="false">
+    <label class="field">비밀번호</label>
+    <input id="inPass" type="password" autocomplete="current-password">
+    <div class="row" style="margin-top:14px">
+      <button id="btnLogin" class="primary grow">연결</button>
+    </div>
+  </section>
+
+  <!-- ===== App ===== -->
+  <main id="app" class="hidden">
+    <header>
+      <h1>Open Wake Switch</h1>
+      <span class="pill"><span id="connDot" class="dot"></span><span id="connText">연결 중…</span></span>
+    </header>
+
+    <section class="card">
+      <h2>다음 알람</h2>
+      <div id="nextBig" class="big">–</div>
+      <div id="nextSub" class="sub">기기 상태를 불러오는 중…</div>
+      <div id="timeWarn" class="warn hidden">기기 시간이 아직 동기화되지 않았어요. 동기화되기 전에는 알람이 동작하지 않아요.</div>
+      <div id="lastLine" class="sub" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card">
+      <h2>지금 바로</h2>
+      <div class="row">
+        <button id="btnOn" class="big-btn primary">💡 켜기</button>
+        <button id="btnOff" class="big-btn">끄기</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>다음 요일 알람만 바꾸기</h2>
+      <div id="ovInfo" class="sub">–</div>
+      <div id="ovControls">
+        <div class="row" style="margin-top:10px">
+          <input id="ovTime" type="time" class="grow">
+          <button id="btnOvSet" class="primary">이번만 이 시간</button>
+        </div>
+        <div class="row">
+          <button id="btnOvSkip" class="grow">이번만 건너뛰기</button>
+          <button id="btnOvClear" class="grow hidden">원래대로</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>일회성 알람 (낮잠)</h2>
+      <div class="chips" id="napChips"></div>
+      <div class="row" style="margin-top:12px">
+        <select id="napDay"><option value="0">오늘</option><option value="1">내일</option></select>
+        <input id="napTime" type="time" class="grow">
+        <button id="btnNapAdd" class="primary">추가</button>
+      </div>
+      <div id="napList" style="margin-top:10px"></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="margin-bottom:6px">
+        <h2 class="grow" style="margin:0">요일별 알람</h2>
+        <span class="sub">사용</span>
+        <label class="switch"><input id="masterOn" type="checkbox"><span></span></label>
+      </div>
+      <div id="days"></div>
+    </section>
+
+    <section class="card">
+      <h2>설정</h2>
+      <div class="row">
+        <div class="grow">자동으로 끄기<div class="sub">알람으로 켠 뒤 정해진 시간이 지나면 끔</div></div>
+        <label class="switch"><input id="autoOffOn" type="checkbox"><span></span></label>
+      </div>
+      <div class="row" id="autoOffRow">
+        <div class="grow sub">켠 뒤</div>
+        <input id="autoOffMin" type="number" min="1" max="240" inputmode="numeric"> <span class="sub">분 후</span>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <div class="grow">놓친 알람 허용 시간<div class="sub">정전·재부팅으로 늦게 켜졌을 때 이 시간 안이면 바로 켬</div></div>
+        <input id="graceMin" type="number" min="0" max="60" inputmode="numeric"> <span class="sub">분</span>
+      </div>
+    </section>
+
+    <footer>
+      <button id="btnLogout" class="ghost sub">연결 정보 지우기</button>
+      <div class="sub" id="fwLine" style="margin-top:6px"></div>
+    </footer>
+  </main>
+</div>
+
+<div id="savebar" class="savebar"><div class="inner">
+  <span class="sub grow">저장하지 않은 변경사항</span>
+  <button id="btnCancel">취소</button>
+  <button id="btnSave" class="primary">저장</button>
+</div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ---------------- constants ----------------
+const T = { cmd: 'ows/cmd', set: 'ows/config/set', cfg: 'ows/config', state: 'ows/state', online: 'ows/online', err: 'ows/error' };
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];                 // Mon..Sun on screen, config index 0 = Sunday
+const DAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
+const NAP_MIN = [15, 20, 30, 45, 60, 90];
+const MAX_ONESHOTS = 5;
+const KIND_KO = { weekly: '요일 알람', override: '이번만 변경', oneshot: '일회성' };
+const $ = (id) => document.getElementById(id);
+
+// ---------------- state ----------------
+let client = null;
+let cfg = null;        // config as reported by the device (source of truth)
+let draft = null;      // weekly/settings edits not yet saved
+let dirty = false, saving = false;
+let devState = null, deviceOnline = false, brokerUp = false;
+let pendingTimer = null;
+
+// ---------------- utils ----------------
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const pad = (n) => String(n).padStart(2, '0');
+function toLocalStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function toDateStr(d) { return toLocalStr(d).slice(0, 10); }
+function parseLocal(s) { // "2026-11-19T06:45" or "2026-11-19"
+  const [date, time = '00:00'] = s.split('T');
+  const [y, m, d] = date.split('-').map(Number); const [hh, mm] = time.split(':').map(Number);
+  return new Date(y, m - 1, d, hh, mm);
+}
+function dayLabel(d) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const x = new Date(d); x.setHours(0, 0, 0, 0);
+  const diff = Math.round((x - today) / 86400000);
+  if (diff === 0) return '오늘';
+  if (diff === 1) return '내일';
+  return `${x.getMonth() + 1}/${x.getDate()}(${DAY_KO[x.getDay()]})`;
+}
+function hm(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function relative(d) {
+  let min = Math.round((d - new Date()) / 60000);
+  if (min < 0) return '지남';
+  if (min < 1) return '곧';
+  const h = Math.floor(min / 60); min %= 60;
+  return (h ? `${h}시간 ` : '') + (min ? `${min}분 ` : '') + '후';
+}
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+function storage(get, val) {
+  try { if (get) return JSON.parse(localStorage.getItem('ows.creds') || 'null');
+        if (val === null) localStorage.removeItem('ows.creds'); else localStorage.setItem('ows.creds', JSON.stringify(val)); }
+  catch (e) { return null; }
+}
+
+// ---------------- MQTT ----------------
+function connect(creds) {
+  if (client) { client.end(true); client = null; }
+  $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+  setConn('connecting');
+  client = mqtt.connect(`wss://${creds.host}:8084/mqtt`, {
+    username: creds.user, password: creds.pass,
+    clientId: 'ows-web-' + Math.random().toString(16).slice(2, 10),
+    clean: true, reconnectPeriod: 4000, connectTimeout: 10000,
+  });
+  client.on('connect', () => { brokerUp = true; setConn(); client.subscribe([T.cfg, T.state, T.online, T.err], { qos: 1 }); });
+  client.on('reconnect', () => { brokerUp = false; setConn('connecting'); });
+  client.on('close', () => { brokerUp = false; setConn(); });
+  client.on('error', (e) => {
+    const m = String(e && e.message || e);
+    if (/auth|password|Not authorized/i.test(m)) {
+      toast('로그인 실패: 사용자 이름/비밀번호를 확인하세요');
+      client.end(true); client = null; showLogin();
+    }
+  });
+  client.on('message', onMessage);
+}
+
+function onMessage(topic, payload) {
+  const s = payload.toString();
+  if (topic === T.online) { deviceOnline = s === '1'; setConn(); render(); return; }
+  if (topic === T.err) { toast('기기가 설정을 거부했어요: ' + s); return; }
+  if (!s) return;
+  let obj; try { obj = JSON.parse(s); } catch (e) { return; }
+  if (topic === T.state) { devState = obj; render(); return; }
+  if (topic === T.cfg) {
+    cfg = obj;
+    if (saving) { saving = false; dirty = false; }
+    if (!dirty) draft = clone(cfg);
+    else { draft.override = clone(cfg.override); draft.oneShots = clone(cfg.oneShots); }
+    clearTimeout(pendingTimer); pendingTimer = null;
+    render(); renderEditors();
+  }
+}
+
+function setConn(mode) {
+  const dot = $('connDot'), txt = $('connText');
+  dot.className = 'dot';
+  if (mode === 'connecting' || (!brokerUp && client)) { txt.textContent = '서버 연결 중…'; return; }
+  if (!brokerUp) { dot.classList.add('bad'); txt.textContent = '서버 연결 끊김'; return; }
+  if (deviceOnline) { dot.classList.add('ok'); txt.textContent = '기기 온라인'; }
+  else { dot.classList.add('bad'); txt.textContent = '기기 오프라인'; }
+}
+
+function sendConfig(next, okMsg) {
+  if (!brokerUp) { toast('서버에 연결되지 않았어요'); return false; }
+  client.publish(T.set, JSON.stringify(next), { qos: 1, retain: true });
+  clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => {
+    toast(deviceOnline ? '기기 응답이 늦어요. 잠시 후 확인해 주세요.' : '기기가 오프라인이에요. 다시 연결되면 자동으로 적용돼요.');
+    saving = false;
+  }, 8000);
+  if (okMsg) toast(okMsg);
+  return true;
+}
+
+function sendCmd(cmd) {
+  if (!brokerUp) { toast('서버에 연결되지 않았어요'); return; }
+  if (!deviceOnline) { toast('기기가 오프라인이라 명령을 보낼 수 없어요'); return; }
+  client.publish(T.cmd, cmd, { qos: 1, retain: false });
+  toast(cmd === 'ON' ? '켜는 중…' : '끄는 중…');
+}
+
+// ---------------- rendering ----------------
+function render() {
+  // status card
+  const st = devState;
+  if (st && st.next) {
+    const d = parseLocal(st.next.at);
+    $('nextBig').textContent = `${dayLabel(d)} ${hm(d)}`;
+    $('nextSub').innerHTML = '';
+    $('nextSub').append(relative(d));
+    const b = document.createElement('span'); b.className = 'badge'; b.textContent = KIND_KO[st.next.kind] || st.next.kind;
+    $('nextSub').append(b);
+  } else if (st) {
+    $('nextBig').textContent = '예정된 알람 없음';
+    $('nextSub').textContent = st.timeOk ? '요일 알람이나 일회성 알람을 추가해 보세요' : '';
+  }
+  $('timeWarn').classList.toggle('hidden', !(st && st.timeOk === false));
+  if (st) {
+    const parts = [];
+    if (st.lastAt) {
+      const src = { alarm: '알람', manual: '수동', 'auto-off': '자동 끄기' }[st.lastSrc] || '';
+      parts.push(`마지막 동작: ${st.last === 'ON' ? '켬' : '끔'} · ${src} · ${dayLabel(parseLocal(st.lastAt))} ${st.lastAt.slice(11)}`);
+    }
+    if (st.autoOffAt) parts.push(`자동 끄기 예정: ${st.autoOffAt.slice(11)}`);
+    $('lastLine').textContent = parts.join('  ·  ');
+    $('fwLine').textContent = `펌웨어 ${st.fw || '?'} · Wi-Fi ${st.rssi ?? '?'} dBm`;
+  }
+
+  // override card
+  const nw = st && st.nextWeekly;
+  const ov = cfg && cfg.override;
+  const info = $('ovInfo');
+  if (!cfg) { info.textContent = '기기 설정을 불러오는 중…'; }
+  else if (ov && ov.date) {
+    const d = parseLocal(ov.date);
+    info.textContent = ov.skip ? `${dayLabel(d)} 알람: 이번만 건너뜀` : `${dayLabel(d)} 알람: 이번만 ${ov.t}로 변경됨`;
+  } else if (nw) {
+    info.textContent = `다음 요일 알람: ${dayLabel(parseLocal(nw.date))} ${nw.t} (기본)`;
+  } else {
+    info.textContent = '예정된 요일 알람이 없어요';
+  }
+  const canOv = !!(cfg && nw);
+  $('btnOvSet').disabled = !canOv; $('btnOvSkip').disabled = !canOv; $('ovTime').disabled = !canOv;
+  $('btnOvClear').classList.toggle('hidden', !ov);
+  if (!$('ovTime').value && nw) $('ovTime').value = nw.t;
+
+  // nap list
+  const list = $('napList'); list.innerHTML = '';
+  const shots = (cfg && cfg.oneShots) || [];
+  shots.slice().sort().forEach((s) => {
+    const d = parseLocal(s);
+    const row = document.createElement('div'); row.className = 'list-item';
+    const t = document.createElement('div'); t.textContent = `⏰ ${dayLabel(d)} ${hm(d)}  `;
+    const r = document.createElement('span'); r.className = 'sub'; r.textContent = relative(d); t.append(r);
+    const x = document.createElement('button'); x.className = 'x'; x.textContent = '삭제';
+    x.onclick = () => { const n = clone(cfg); n.oneShots = shots.filter((v) => v !== s); sendConfig(n, '일회성 알람 삭제'); };
+    row.append(t, x); list.append(row);
+  });
+  $('btnNapAdd').disabled = !cfg;
+  document.querySelectorAll('#napChips button').forEach((b) => b.disabled = !cfg);
+  setConn();
+}
+
+function renderEditors() {
+  if (!draft) return;
+  const box = $('days'); box.innerHTML = '';
+  DAY_ORDER.forEach((i) => {
+    const d = draft.days[i];
+    const row = document.createElement('div'); row.className = 'day' + (d.on ? '' : ' off');
+    const name = document.createElement('div'); name.className = 'name'; name.textContent = DAY_KO[i];
+    name.style.color = i === 0 ? '#ef4444' : i === 6 ? '#3b82f6' : '';
+    const time = document.createElement('input'); time.type = 'time'; time.value = d.t;
+    time.onchange = () => { if (time.value) { draft.days[i].t = time.value; markDirty(); } };
+    const sw = document.createElement('label'); sw.className = 'switch';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = d.on;
+    cb.onchange = () => { draft.days[i].on = cb.checked; row.classList.toggle('off', !cb.checked); markDirty(); };
+    sw.append(cb, document.createElement('span'));
+    row.append(name, time, sw); box.append(row);
+  });
+  $('masterOn').checked = draft.enabled;
+  $('days').style.opacity = draft.enabled ? 1 : 0.45;
+  $('autoOffOn').checked = draft.autoOffMin > 0;
+  $('autoOffMin').value = draft.autoOffMin > 0 ? draft.autoOffMin : 30;
+  $('autoOffRow').style.display = draft.autoOffMin > 0 ? '' : 'none';
+  $('graceMin').value = draft.graceMin;
+  $('savebar').classList.toggle('show', dirty);
+}
+
+function markDirty() { dirty = true; $('savebar').classList.add('show'); }
+
+// ---------------- actions ----------------
+function addOneShot(date) {
+  if (!cfg) return;
+  if (date <= new Date()) { toast('이미 지난 시간이에요'); return; }
+  const s = toLocalStr(date);
+  const shots = (cfg.oneShots || []).filter((v) => v !== s);
+  if (shots.length >= MAX_ONESHOTS) { toast(`일회성 알람은 최대 ${MAX_ONESHOTS}개까지예요`); return; }
+  const n = clone(cfg); n.oneShots = shots.concat([s]).sort();
+  sendConfig(n, `${dayLabel(date)} ${hm(date)} 알람 추가`);
+}
+
+function wire() {
+  $('btnLogin').onclick = () => {
+    const creds = { host: $('inHost').value.trim().replace(/^wss?:\/\//, '').replace(/[:/].*$/, ''),
+                    user: $('inUser').value.trim(), pass: $('inPass').value };
+    if (!creds.host || !creds.user || !creds.pass) { toast('세 칸을 모두 입력하세요'); return; }
+    storage(false, creds); connect(creds);
+  };
+  $('btnLogout').onclick = () => { storage(false, null); if (client) client.end(true); client = null; showLogin(); };
+  $('btnOn').onclick = () => sendCmd('ON');
+  $('btnOff').onclick = () => sendCmd('OFF');
+
+  $('btnOvSet').onclick = () => {
+    const nw = devState && devState.nextWeekly; const t = $('ovTime').value;
+    if (!nw || !t) return;
+    const n = clone(cfg); n.override = { date: nw.date, t };
+    sendConfig(n, `${dayLabel(parseLocal(nw.date))} 알람을 이번만 ${t}로`);
+  };
+  $('btnOvSkip').onclick = () => {
+    const nw = devState && devState.nextWeekly; if (!nw) return;
+    const n = clone(cfg); n.override = { date: nw.date, skip: true };
+    sendConfig(n, `${dayLabel(parseLocal(nw.date))} 알람을 이번만 건너뜀`);
+  };
+  $('btnOvClear').onclick = () => { const n = clone(cfg); n.override = null; sendConfig(n, '원래 시간으로 되돌림'); };
+
+  const chips = $('napChips');
+  NAP_MIN.forEach((m) => {
+    const b = document.createElement('button');
+    b.textContent = m < 60 ? `+${m}분` : `+${Math.floor(m / 60)}시간${m % 60 ? ` ${m % 60}분` : ''}`;
+    b.onclick = () => { const d = new Date(Date.now() + m * 60000); d.setSeconds(0, 0); addOneShot(d); };
+    chips.append(b);
+  });
+  $('btnNapAdd').onclick = () => {
+    const t = $('napTime').value; if (!t) { toast('시간을 선택하세요'); return; }
+    const d = new Date(); d.setDate(d.getDate() + Number($('napDay').value));
+    const [hh, mm] = t.split(':').map(Number); d.setHours(hh, mm, 0, 0);
+    addOneShot(d);
+  };
+
+  $('masterOn').onchange = () => { draft.enabled = $('masterOn').checked; $('days').style.opacity = draft.enabled ? 1 : 0.45; markDirty(); };
+  $('autoOffOn').onchange = () => {
+    const on = $('autoOffOn').checked;
+    draft.autoOffMin = on ? Math.min(240, Math.max(1, Number($('autoOffMin').value) || 30)) : 0;
+    $('autoOffRow').style.display = on ? '' : 'none'; markDirty();
+  };
+  $('autoOffMin').onchange = () => {
+    const v = Math.min(240, Math.max(1, Number($('autoOffMin').value) || 30));
+    $('autoOffMin').value = v; if ($('autoOffOn').checked) { draft.autoOffMin = v; markDirty(); }
+  };
+  $('graceMin').onchange = () => {
+    const v = Math.min(60, Math.max(0, Number($('graceMin').value) || 0));
+    $('graceMin').value = v; draft.graceMin = v; markDirty();
+  };
+
+  $('btnCancel').onclick = () => { dirty = false; draft = clone(cfg); renderEditors(); };
+  $('btnSave').onclick = () => {
+    if (!draft) return;
+    const n = clone(draft); n.override = cfg.override; n.oneShots = cfg.oneShots;   // never overwrite newer quick edits
+    if (sendConfig(n, '저장 중…')) saving = true;
+  };
+
+  setInterval(render, 30000);   // keep "N분 후" fresh
+}
+
+function showLogin() {
+  $('app').classList.add('hidden'); $('login').classList.remove('hidden');
+  const c = storage(true);
+  if (c) { $('inHost').value = c.host || ''; $('inUser').value = c.user || ''; }
+}
+
+wire();
+const saved = storage(true);
+if (saved && saved.host && saved.user && saved.pass) connect(saved); else showLogin();
+</script>
+</body>
+</html>
